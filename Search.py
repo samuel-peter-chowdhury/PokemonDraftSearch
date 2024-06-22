@@ -25,6 +25,7 @@ class SearchObject:
         self.special_move_category = None
         self.type_effective_resist_1 = None
         self.type_effective_resist_2 = None
+        self.type_effective_immune = None
 
 
 def execute_search(search_object: SearchObject):
@@ -88,11 +89,21 @@ def execute_search(search_object: SearchObject):
                     PokemonTypeEffectiveModel.name == search_object.type_effective_resist_2.lower(),
                     PokemonTypeEffectiveModel.multiplier < 1.0
                 )
-            ) if search_object.type_effective_resist_2 is not None else PokemonModel.type_effective.any())
+            ) if search_object.type_effective_resist_2 is not None else PokemonModel.type_effective.any()),
+            (PokemonModel.type_effective.any(
+                and_(
+                    PokemonTypeEffectiveModel.name == search_object.type_effective_immune.lower(),
+                    PokemonTypeEffectiveModel.multiplier == 0.0
+                )
+            ) if search_object.type_effective_immune is not None else PokemonModel.type_effective.any())
         )
     ))
     response = session.execute(stmt)
     pokemon = []
     for p in response.scalars():
-        pokemon.append({'name': p.name, 'point_value': p.point_value})
+        moves = None
+        if search_object.special_move_category is not None:
+            moves = ', '.join([m.name for m in p.moves if m.category == search_object.special_move_category])
+        pokemon.append({'name': p.name, 'point_value': p.point_value, 'speed': p.speed,
+                        'moves': moves})
     return pokemon

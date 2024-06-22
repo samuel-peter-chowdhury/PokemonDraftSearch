@@ -67,6 +67,7 @@ class SearchInput:
         self.special_move_category = StandardInput(input_frame_right, 'Move Category')
         self.type_effective_resist_1 = StandardInput(input_frame_right, 'Resist 1')
         self.type_effective_resist_2 = StandardInput(input_frame_right, 'Resist 2')
+        self.type_effective_immune = StandardInput(input_frame_right, 'Immunity')
 
 
 def search(search_input: SearchInput):
@@ -94,11 +95,15 @@ def search(search_input: SearchInput):
     search_object.special_move_category = search_input.special_move_category.entry.get() or None
     search_object.type_effective_resist_1 = search_input.type_effective_resist_1.entry.get() or None
     search_object.type_effective_resist_2 = search_input.type_effective_resist_2.entry.get() or None
+    search_object.type_effective_immune = search_input.type_effective_immune.entry.get() or None
     pokemon = execute_search(search_object)
     pokemon.sort(key=lambda x: x['point_value'], reverse=True)
     response_text = ''
+    if len(pokemon) == 0:
+        response_text = 'No results'
     for p in pokemon:
-        response_text += f'{p['point_value']} pts: {p['name']}\n'
+        response_text += f'{p['point_value']} pts: {p['name']} ({p['speed']} Spe)\n'
+        response_text += f'        Moves: {p['moves']}\n' if p['moves'] is not None else ''
     text_area.configure(state='normal')
     text_area.delete('1.0', END)
     text_area.insert(tk.INSERT, response_text)

@@ -33,6 +33,7 @@ class Pokemon:
         self.oob = DexData(data['oob'])
         self.moves = []
         self.special_moves = {}
+        self.coverage_moves = {}
         self.type_effective = {}
         self.point_value = None
         self.sprite = f'=IMAGE(\"https://www.smogon.com/dex/media/sprites/xy/{transform_pokemon_name(self.name)}.gif\")'
@@ -78,6 +79,11 @@ def fetch_type_effective_data():
     return type_effective
 
 
+def fetch_ability_resist_data():
+    file = open('ability_resist.json')
+    return json.load(file)
+
+
 def fetch_point_value_data():
     point_value = {}
     filename = open('Season 8 - Tier List.csv', 'r')
@@ -97,6 +103,21 @@ def fetch_point_value_data():
     return point_value
 
 
+def fetch_coverage_move_data():
+    moves = {}
+    file = open('moves.json')
+    json_object = json.load(file)
+    for obj in json_object:
+        if (
+                obj['isNonstandard'].lower() == 'standard' and
+                obj['category'].lower() != 'non-damaging' and
+                (obj['power'] >= 60 or 'times' in obj['description']) and
+                (obj['accuracy'] == 0 or obj['accuracy'] >= 70)
+        ):
+            moves[obj['name'].lower()] = dict(obj)
+    return moves
+
+
 def initialize_special_moves(pokemon_obj: Pokemon, data: dict):
     pokemon_moves = [move.lower() for move in pokemon_obj.moves]
     for key, value in data.items():
@@ -106,11 +127,26 @@ def initialize_special_moves(pokemon_obj: Pokemon, data: dict):
                 pokemon_obj.special_moves[key].append(move)
 
 
-def initialize_type_effective(pokemon_obj: Pokemon, data: dict):
-    pokemon_obj.type_effective = dict(data[pokemon_obj.types[0].lower()])
+def initialize_coverage_moves(pokemon_obj: Pokemon, data: dict):
+    pokemon_types = [pokemon_type.lower() for pokemon_type in pokemon_obj.types]
+    for move in pokemon_obj.moves:
+        if move.lower() in data:
+            move_type = data[move.lower()]['type'].lower()
+            if move_type not in pokemon_types:
+                if move_type not in pokemon_obj.coverage_moves:
+                    pokemon_obj.coverage_moves[move_type] = []
+                pokemon_obj.coverage_moves[move_type].append(move.lower())
+
+
+def initialize_type_effective(pokemon_obj: Pokemon, type_effective: dict, ability_resist: dict):
+    pokemon_obj.type_effective = dict(type_effective[pokemon_obj.types[0].lower()])
     if len(pokemon_obj.types) == 2:
         for key, value in pokemon_obj.type_effective.items():
-            pokemon_obj.type_effective[key] = value * data[pokemon_obj.types[1].lower()][key]
+            pokemon_obj.type_effective[key] = value * type_effective[pokemon_obj.types[1].lower()][key]
+    for ability in pokemon_obj.abilities:
+        if ability.lower() in ability_resist:
+            for item in ability_resist[ability.lower()]:
+                pokemon_obj.type_effective[item[0]] *= item[1]
 
 
 def export_pokemon_to_tsv(pokemon: []):
@@ -136,14 +172,17 @@ def export_pokemon_to_tsv(pokemon: []):
 def initialize_database():
     pokemon = fetch_pokemon_data()
     special_moves = fetch_special_move_data()
+    coverage_moves = fetch_coverage_move_data()
     type_effective = fetch_type_effective_data()
+    ability_resist = fetch_ability_resist_data()
     point_value = fetch_point_value_data()
     pokemon_count = len(pokemon)
     for i, p in enumerate(pokemon):
         print(f'{i}/{pokemon_count}')
         fetch_pokemon_move_data(p)
         initialize_special_moves(p, special_moves)
-        initialize_type_effective(p, type_effective)
+        initialize_coverage_moves(p, coverage_moves)
+        initialize_type_effective(p, type_effective, ability_resist)
         if p.name.lower() in point_value:
             p.point_value = point_value[p.name.lower()]
         pokemon_model = PokemonModel(p)
@@ -159,6 +198,10 @@ def initialize_database():
             pokemon_move_model = PokemonMoveModel(pokemon_model.id, m, None)
             session.add(pokemon_move_model)
         for key, value in p.special_moves.items():
+            for m in value:
+                pokemon_move_model = PokemonMoveModel(pokemon_model.id, m, key)
+                session.add(pokemon_move_model)
+        for key, value in p.coverage_moves.items():
             for m in value:
                 pokemon_move_model = PokemonMoveModel(pokemon_model.id, m, key)
                 session.add(pokemon_move_model)
